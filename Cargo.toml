@@ -5,3 +5,4 @@ authors = ["Jakob L. Kreuze <jakob@memeware.net>"]
 
 [dependencies]
 byteorder = "1"
+simple-error = "0.1"

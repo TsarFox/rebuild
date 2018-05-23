@@ -1,32 +1,12 @@
 extern crate byteorder;
+extern crate simple_error;
 
-use std::fmt;
+use std::collections::HashMap;
 use std::error::Error;
+use std::fs::File;
+use std::io::Read;
 
 use self::byteorder::{ByteOrder, LittleEndian};
-
-#[derive(Debug)]
-pub struct FormatError {
-    details: &'static str,
-}
-
-impl FormatError {
-    fn new(details: &'static str) -> FormatError {
-        FormatError { details }
-    }
-}
-
-impl fmt::Display for FormatError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.details)
-    }
-}
-
-impl Error for FormatError {
-    fn description(&self) -> &str {
-        self.details
-    }
-}
 
 
 // The ".grp" file format is just a collection of a lot of files stored into 1 big
@@ -38,75 +18,77 @@ impl Error for FormatError {
 // after the other in the same order as the list of files.
 
 #[derive(Debug)]
-pub struct GroupEntry {
-    pub name: String,
-    pub data: Vec<u8>,
+pub struct GroupManager {
+    files: HashMap<String, Vec<u8>>,
 }
 
-#[derive(Debug)]
-pub struct Group {
-    pub file_count: usize,
+impl GroupManager {
+    pub fn new() -> GroupManager {
+        GroupManager { files: HashMap::new() }
+    }
 
-    data: Vec<u8>,
-
-    iter_index: usize,
-    data_off: usize,
-}
-
-impl Group {
-    pub fn new(data: &[u8]) -> Result<Group, Box<Error>> {
+    pub fn load_from_slice(&mut self, data: &[u8]) -> Result<(), Box<Error>> {
         let len = data.len();
 
         if len < 16 {
-            let details = "'data' is too small to contain the GRP header.";
-            return Err(Box::new(FormatError::new(details)));
+            bail!("'data' is too small to contain the GRP header.");
         }
 
         let header = String::from_utf8(data[..12].to_vec())?;
 
         if header.as_str() != "KenSilverman" {
-            let details = "Invalid GRP header.";
-            return Err(Box::new(FormatError::new(details)));
+            bail!("Invalid GRP header.");
         }
 
         let file_count = LittleEndian::read_u32(&data[12..16]) as usize;
 
-        // 16 bytes for the header, and 16 bytes for each file entry. The raw
+        // 16 bytes for the header, and 16 bytes for each table entry. The raw
         // data will follow.
-        let data_off = 16 * (file_count + 1) as usize;
+        let data_start = 16 * (file_count + 1) as usize;
 
-        if data_off >= len {
-            let details = "Invalid number of files.";
-            return Err(Box::new(FormatError::new(details)));
+        if data_start >= len {
+            bail!("Invalid number of files.");
         }
 
-        Ok(Group { file_count, data: data.clone().to_vec(), iter_index: 0, data_off })
+        let mut data_off = data_start;
+
+        for i in 0..file_count {
+            // Similar to how 'data_start' was calculated - 16 bytes for the
+            // header, and 16 bytes for each table entry.
+            let table_off = 16 * (i + 1);
+
+            let name = &data[table_off..table_off+12];
+            let name = String::from_utf8(name.to_vec())?;
+            let name = if let Some(j) = name.find('\x00') {
+                 String::from(&name[..j])
+            } else {
+                name
+            };
+
+            let size = &data[table_off+12..table_off+16];
+            let size = LittleEndian::read_u32(size) as usize;
+
+            let data = data[data_off..data_off+size].to_vec();
+            data_off += size;
+
+            self.files.insert(name, data);
+        }
+
+        Ok(())
     }
-}
 
-impl Iterator for Group {
-    type Item = GroupEntry;
+    pub fn load_from_file(&mut self, filename: &str) -> Result<(), Box<Error>> {
+        let mut file = File::open(filename)?;
+        let mut bytes: Vec<u8> = Vec::new();
 
-    fn next(&mut self) -> Option<GroupEntry> {
-        if self.iter_index >= self.file_count {
-            return None;
-        }
+        file.read_to_end(&mut bytes)?;
+        self.load_from_slice(&bytes)?;
 
-        let table_off = 16 * (1 + self.iter_index);
+        Ok(())
+    }
 
-        // Raising an error would be more ideal than a sentinel filename.
-        let size = LittleEndian::read_u32(&self.data[table_off+12..table_off+16]) as usize;
-        let name = match String::from_utf8(self.data[table_off..table_off+12].to_vec()) {
-            Ok(name) => name,
-            Err(_) => String::from("ERRORFNAMEAA"),
-        };
-
-        let result = Some(GroupEntry { name, data: self.data[self.data_off..self.data_off+size].to_vec() });
-
-        self.iter_index += 1;
-        self.data_off += size;
-
-        result
+    pub fn get(&self, filename: &str) -> Option<&[u8]> {
+        Some(&self.files.get(filename)?)
     }
 }
 
