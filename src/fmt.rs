@@ -8,7 +8,6 @@ use std::io::Read;
 
 use self::byteorder::{ByteOrder, LittleEndian};
 
-
 // The ".grp" file format is just a collection of a lot of files stored into 1 big
 // one. I tried to make the format as simple as possible: The first 12 bytes
 // contains my name, "KenSilverman". The next 4 bytes is the number of files that
