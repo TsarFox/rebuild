@@ -38,7 +38,7 @@ fn main() {
     let filename = "DUKE3D.GRP";
     let mut group_manager = fmt::GroupManager::new();
 
-    if let Err(e) = group_manager.load_from_file(filename) {
+    if let Err(e) = group_manager.load_file(filename) {
         println!("Couldn't open {}: {}", filename, e);
         process::exit(1);
     }
