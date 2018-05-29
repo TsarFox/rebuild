@@ -2,14 +2,15 @@ extern crate byteorder;
 extern crate simple_error;
 
 use std::collections::HashMap;
-use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::Read;
-use std::path::Path;
 
 use self::byteorder::{ByteOrder, LittleEndian};
+use path::PathManager;
 
+// What's the .GRP file format?
+//
 // The ".grp" file format is just a collection of a lot of files stored into 1 big
 // one. I tried to make the format as simple as possible: The first 12 bytes
 // contains my name, "KenSilverman". The next 4 bytes is the number of files that
@@ -20,29 +21,24 @@ use self::byteorder::{ByteOrder, LittleEndian};
 
 /// Implementation of a group file "cache", into which the contents of several
 /// group files can be loaded. This is somewhat similar to the way that
-/// Silverman's original code goes about loading game data. Additionally, this
-/// struct manages a list of "search paths" on the filesystem to resolve the
-/// absolute path of data files that have several possible locations.
-/// See the documentation of 'load_file' for more information.
+/// Silverman's original code goes about loading game data.
 #[derive(Debug)]
 pub struct GroupManager {
+    path_manager: PathManager,
     files: HashMap<String, Vec<u8>>,
-    search: Vec<String>,
 }
 
 impl GroupManager {
-    pub fn new() -> GroupManager {
-        let mut result = GroupManager {
-            files: HashMap::new(),
-            search: Vec::new()
-        };
-
-        result.init_search_paths();
-
-        result
+    pub fn new(path_manager: PathManager) -> GroupManager {
+        GroupManager { path_manager, files: HashMap::new() }
     }
 
     /// Loads the contents of an in-memory group file into the cache.
+    ///
+    /// # Errors
+    ///
+    /// The operation will fail on any sort of parsing error - such as an
+    /// invalid header, or sizes that would cause an invalid read.
     pub fn load_data(&mut self, data: &[u8]) -> Result<(), Box<Error>> {
         let len = data.len();
 
@@ -84,6 +80,10 @@ impl GroupManager {
             let size = &data[table_off+12..table_off+16];
             let size = LittleEndian::read_u32(size) as usize;
 
+            if data_off + size > len {
+                bail!("`data_off >= len` - Table was likely corrupted.");
+            }
+
             let data = data[data_off..data_off+size].to_vec();
             data_off += size;
 
@@ -93,130 +93,31 @@ impl GroupManager {
         Ok(())
     }
 
-    /// Obtains binary data associated with the given filename from the cache.
-    pub fn get(&self, filename: &str) -> Option<&[u8]> {
-        Some(&self.files.get(filename)?)
-    }
-
-    /// Go through the search path list in order and load the contents of the
-    /// first group archive with the given name. Specifically, the default
-    /// search path order is:
+    /// Queries the associated PathManager for the location of a file with the
+    /// given name, and if found, loads its contents.
     ///
-    /// - ".",
-    /// - "/usr/local/share/games/rebuild",
-    /// - "/usr/share/games/rebuild",
-    /// - "/usr/local/share/games/eduke32",
-    /// - "/usr/share/games/eduke32",
-    /// - "/usr/local/share/games/jfduke3d",
-    /// - "/usr/share/games/jfduke3d",
-    /// - "$HOME/.rebuild",
+    /// # Errors
     ///
-    /// This is followed by any additional paths in the search path list that
-    /// came about from a call to 'add_search_path'.
-    pub fn load_file(&mut self, filename: &str) -> Result<(), Box<Error>> {
-        for directory in self.search.clone().iter() {
-            let path = format!("{}/{}", directory, filename);
+    /// A return value of 'Err' indicates that the given path did not exist.
+    pub fn load_file(&mut self, name: &str) -> Result<(), Box<Error>> {
+        if let Some(path) = self.path_manager.find(name) {
+            let mut file = File::open(path)?;
+            let mut bytes: Vec<u8> = Vec::new();
 
-            if Path::new(&path).exists() {
-                let mut file = File::open(path)?;
-                let mut bytes: Vec<u8> = Vec::new();
+            file.read_to_end(&mut bytes)?;
+            self.load_data(&bytes)?;
 
-                file.read_to_end(&mut bytes)?;
-                self.load_data(&bytes)?;
-
-                return Ok(());
-            }
+            return Ok(());
         }
 
         bail!("File not found in any search paths.")
     }
 
-    /// Adds an additional path for 'load_file' to search.
-    pub fn add_search_path(&mut self, path: &str) -> Result<(), Box<Error>> {
-        if Path::new(&path).exists() {
-            self.search.push(String::from(path));
-        } else {
-            bail!("Path does not exist");
-        }
-
-        Ok(())
-    }
-
-    // TODO: Implement the following additional search paths:
-    // - The "standard" paths for OSX (See G_AddSearchPaths)
-    // - The "standard" paths for Windows (See G_AddSearchPaths)
-    // - Those specified on the command-line.
-    //   - See the CommandPaths and CommandGrps globals in common.cpp
-    // - The "app dir" on OSX.
-    // - PROPERLY add the CWD.
-    // - $HOME/apps/rebuild/ (?)
-    // - $HOME/.config/rebuild/
-    // - Those specified via DUKE3DGRP environment variable.
-    //   - See JBF 20031220
-    fn init_search_paths(&mut self) {
-        // Initial base paths that don't need a $HOME expansion.
-        let directories = vec![
-            ".",
-            "/usr/share/games/jfduke3d",
-            "/usr/local/share/games/jfduke3d",
-            "/usr/share/games/eduke32",
-            "/usr/local/share/games/eduke32",
-            "/usr/share/games/rebuild",
-            "/usr/local/share/games/rebuild",
-        ];
-
-        for directory in directories.iter() {
-            self.add_search_path(directory).ok();
-        }
-
-        // TODO: Steam paths.
-        let directories = vec![
-            "$HOME/.rebuild",
-        ];
-
-        if let Some(home) = env::home_dir() {
-            if let Some(home) = home.to_str() {
-                for path in directories.iter() {
-                    let path = String::from(*path).replace("$HOME", home);
-                    self.add_search_path(&path).ok();
-                }
-            }
-        }
+    /// Obtains binary data associated with the given filename from the cache.
+    pub fn get(&self, filename: &str) -> Option<&[u8]> {
+        Some(&self.files.get(filename)?)
     }
 }
-
-// What's the .MAP / .ART file format?
-//
-// Go to my Build Source Code Page and download BUILDSRC.ZIP. I have a text file
-// in there (BUILDINF.TXT) which describes both formats.
-
-// TODO: Write documentation
-// pub struct Art {
-
-// }
-
-// impl Art {
-//     pub fn new(data: &[u8]) -> Result<Art, Box<Error>> {
-//         let len = data.len();
-//         let version = LittleEndian::read_u32(&data[0..4]);
-
-//         let _tile_count = LittleEndian::read_u32(&data[4..8]);
-//         let first_tile = LittleEndian::read_u32(&data[8..12]);
-//         let last_tile = LittleEndian::read_u32(&data[12..16]);
-//         let tile_count = last_tile - first_tile + 1; // + 1?
-
-//         let tiles_x: Vec<u16> = Vec::new();
-//         let tiles_y: Vec<u16> = Vec::new();
-//         let tiles_animation: Vec<u32> = Vec::new();
-
-//         // short tilesizx[localtileend-localtilestart+1];
-//         // short tilesizy[localtileend-localtilestart+1];
-
-//         if version != 1 {
-//             bail!("Invalid ART version");
-//         }
-//     }
-// }
 
 #[cfg(test)]
 mod tests {
@@ -232,7 +133,6 @@ mod tests {
         // - 'TESTFILEC': 0x03, repeated three times.
         //
         // The sizes listed in the table accurately represent this.
-
         let data = vec![
             b'K', b'e', b'n', b'S', b'i', b'l', b'v', b'e',
             b'r', b'm', b'a', b'n', 0x03, 0x00, 0x00, 0x00,
@@ -245,7 +145,8 @@ mod tests {
             0x01, 0x02, 0x02, 0x03, 0x03, 0x03,
         ];
 
-        let mut group_manager = GroupManager::new();
+        let path_manager = PathManager::new();
+        let mut group_manager = GroupManager::new(path_manager);
 
         match group_manager.load_data(&data) {
             Err(e) => panic!("{}", e),
@@ -284,12 +185,12 @@ mod tests {
     fn test_incomplete_header() {
         // Binary blob similar to the GRP test vector above, but with a header
         // that would be too small to be valid.
-
         let data = vec![
             b'J', b'a', b'k', b'o', b'b',
         ];
 
-        let mut group_manager = GroupManager::new();
+        let path_manager = PathManager::new();
+        let mut group_manager = GroupManager::new(path_manager);
 
         match group_manager.load_data(&data) {
             Ok(_) => panic!("Accepted incomplete header."),
@@ -301,7 +202,6 @@ mod tests {
     fn test_invalid_header() {
         // Binary blob similar to the GRP test vector above, but with an invalid
         // "magic" header.
-
         let data = vec![
             b'J', b'a', b'k', b'o', b'b', b'L', b'K', b'r',
             b'e', b'u', b'z', b'e', 0x01, 0x00, 0x00, 0x00,
@@ -310,7 +210,8 @@ mod tests {
             0x01,
         ];
 
-        let mut group_manager = GroupManager::new();
+        let path_manager = PathManager::new();
+        let mut group_manager = GroupManager::new(path_manager);
 
         match group_manager.load_data(&data) {
             Ok(_) => panic!("Accepted invalid header."),
@@ -323,7 +224,6 @@ mod tests {
         // Binary blob similar to the GRP test vector above, but with a header
         // indicating that there are more files than could possibly be contained
         // in the table.
-
         let data = vec![
             b'K', b'e', b'n', b'S', b'i', b'l', b'v', b'e',
             b'r', b'm', b'a', b'n', 0x69, 0x00, 0x00, 0x00,
@@ -332,7 +232,8 @@ mod tests {
             0x01,
         ];
 
-        let mut group_manager = GroupManager::new();
+        let path_manager = PathManager::new();
+        let mut group_manager = GroupManager::new(path_manager);
 
         match group_manager.load_data(&data) {
             Ok(_) => panic!("Accepted invalid header."),
@@ -340,5 +241,24 @@ mod tests {
         }
     }
 
-    // TODO: Add checks for data_off and table_off going out of bounds.
+    #[test]
+    fn test_not_enough_data() {
+        // Binary blob similar to the GRP test vector above, but with a file
+        // entry larger than the data following the table.
+        let data = vec![
+            b'K', b'e', b'n', b'S', b'i', b'l', b'v', b'e',
+            b'r', b'm', b'a', b'n', 0x69, 0x00, 0x00, 0x00,
+            b'T', b'E', b'S', b'T', b'F', b'I', b'L', b'E',
+            b'A', 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+            0x01,
+        ];
+
+        let path_manager = PathManager::new();
+        let mut group_manager = GroupManager::new(path_manager);
+
+        match group_manager.load_data(&data) {
+            Ok(_) => panic!("Accepted invalid header."),
+            Err(_) => (),
+        }
+    }
 }
