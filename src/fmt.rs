@@ -142,8 +142,17 @@ impl GroupManager {
         Ok(())
     }
 
-    // TODO: Conventional paths for OSX and Windows from EDuke32's
-    // G_AddSearchPaths.
+    // TODO: Implement the following additional search paths:
+    // - The "standard" paths for OSX (See G_AddSearchPaths)
+    // - The "standard" paths for Windows (See G_AddSearchPaths)
+    // - Those specified on the command-line.
+    //   - See the CommandPaths and CommandGrps globals in common.cpp
+    // - The "app dir" on OSX.
+    // - PROPERLY add the CWD.
+    // - $HOME/apps/rebuild/ (?)
+    // - $HOME/.config/rebuild/
+    // - Those specified via DUKE3DGRP environment variable.
+    //   - See JBF 20031220
     fn init_search_paths(&mut self) {
         // Initial base paths that don't need a $HOME expansion.
         let directories = vec![
@@ -176,7 +185,6 @@ impl GroupManager {
     }
 }
 
-
 // What's the .MAP / .ART file format?
 //
 // Go to my Build Source Code Page and download BUILDSRC.ZIP. I have a text file
@@ -186,7 +194,6 @@ impl GroupManager {
 // pub struct Art {
 
 // }
-
 
 // impl Art {
 //     pub fn new(data: &[u8]) -> Result<Art, Box<Error>> {
@@ -210,7 +217,6 @@ impl GroupManager {
 //         }
 //     }
 // }
-
 
 #[cfg(test)]
 mod tests {
