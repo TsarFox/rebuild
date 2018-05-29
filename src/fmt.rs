@@ -10,49 +10,6 @@ use std::path::Path;
 
 use self::byteorder::{ByteOrder, LittleEndian};
 
-
-// FIXME: This doesn't follow any non-*NIX conventions.
-
-/// Means of locating a group file that may be located in any number of file
-/// system locations. Begins by searching the current working directory, and
-/// then moves onto standard *NIX home directory locations, such as
-/// '~/.rebuild'.
-
-fn find_file(filename: &str) -> Option<String> {
-    // Initial base paths that don't need to be expanded.
-    let directories = vec!["./"];
-
-    let mut directories: Vec<String> = directories.iter()
-        .map(|s| String::from(*s))
-        .collect();
-
-    match env::home_dir() {
-        Some(path) => {
-            match path.to_str() {
-                Some(path) => {
-                    let mut path = String::from(path);
-                    path.push_str("/.rebuild/");
-                    directories.push(path);
-                }
-                None => (),
-            }
-        }
-        None => (),
-    }
-
-    for root in directories.iter() {
-        let mut path = root.clone();
-        path.push_str(filename);
-
-        if Path::new(&path).exists() {
-            return Some(path);
-        }
-    }
-
-    None
-}
-
-
 // The ".grp" file format is just a collection of a lot of files stored into 1 big
 // one. I tried to make the format as simple as possible: The first 12 bytes
 // contains my name, "KenSilverman". The next 4 bytes is the number of files that
@@ -61,19 +18,25 @@ fn find_file(filename: &str) -> Option<String> {
 // the file's size. The rest of the group file is just the raw data packed one
 // after the other in the same order as the list of files.
 
-
 /// Implementation of a group file "cache", into which the contents of various
 /// group files are loaded. This is only somewhat reminiscent of the way
 /// Silverman's original code goes about loading game data.
-
 #[derive(Debug)]
 pub struct GroupManager {
     files: HashMap<String, Vec<u8>>,
+    search: Vec<String>,
 }
 
 impl GroupManager {
     pub fn new() -> GroupManager {
-        GroupManager { files: HashMap::new() }
+        let mut result = GroupManager {
+            files: HashMap::new(),
+            search: Vec::new()
+        };
+
+        result.init_search_paths();
+
+        result
     }
 
     /// Loads the contents of an in-memory group file into the cache.
@@ -127,27 +90,110 @@ impl GroupManager {
         Ok(())
     }
 
-    /// Loads the contents of an on-disk group file into the cache.
-    pub fn load_file(&mut self, filename: &str) -> Result<(), Box<Error>> {
-        let filename = match find_file(filename) {
-            Some(filename) => filename,
-            None => bail!("File not found in any search paths."),
-        };
-
-        let mut file = File::open(filename)?;
-        let mut bytes: Vec<u8> = Vec::new();
-
-        file.read_to_end(&mut bytes)?;
-        self.load_data(&bytes)?;
-
-        Ok(())
-    }
-
     /// Obtains binary data associated with the given filename from the cache.
     pub fn get(&self, filename: &str) -> Option<&[u8]> {
         Some(&self.files.get(filename)?)
     }
+
+    // FIXME: Documentation needs to be rewritten.
+
+    /// Loads the contents of an on-disk group file into the cache.
+    pub fn load_file(&mut self, filename: &str) -> Result<(), Box<Error>> {
+        for directory in self.search.clone().iter() {
+            let path = format!("{}/{}", directory, filename);
+
+            if Path::new(&path).exists() {
+                let mut file = File::open(path)?;
+                let mut bytes: Vec<u8> = Vec::new();
+
+                file.read_to_end(&mut bytes)?;
+                self.load_data(&bytes)?;
+
+                return Ok(());
+            }
+        }
+
+        bail!("File not found in any search paths.")
+    }
+
+    pub fn add_search_path(&mut self, path: &str) -> Result<(), Box<Error>> {
+        if Path::new(&path).exists() {
+            self.search.push(String::from(path));
+        } else {
+            bail!("Path does not exist");
+        }
+
+        Ok(())
+    }
+
+    // TODO: Conventional paths for OSX and Windows from EDuke32's
+    // G_AddSearchPaths.
+    fn init_search_paths(&mut self) {
+        // Initial base paths that don't need a $HOME expansion.
+        let directories = vec![
+            ".",
+            "/usr/share/games/jfduke3d",
+            "/usr/local/share/games/jfduke3d",
+            "/usr/share/games/eduke32",
+            "/usr/local/share/games/eduke32",
+            "/usr/share/games/rebuild",
+            "/usr/local/share/games/rebuild",
+        ];
+
+        for directory in directories.iter() {
+            self.add_search_path(directory).ok();
+        }
+
+        // TODO: Steam paths.
+        let directories = vec![
+            "$HOME/.rebuild",
+        ];
+
+        if let Some(home) = env::home_dir() {
+            if let Some(home) = home.to_str() {
+                for path in directories.iter() {
+                    let path = String::from(*path).replace("$HOME", home);
+                    self.add_search_path(&path).ok();
+                }
+            }
+        }
+    }
 }
+
+
+// What's the .MAP / .ART file format?
+//
+// Go to my Build Source Code Page and download BUILDSRC.ZIP. I have a text file
+// in there (BUILDINF.TXT) which describes both formats.
+
+// TODO: Write documentation
+// pub struct Art {
+
+// }
+
+
+// impl Art {
+//     pub fn new(data: &[u8]) -> Result<Art, Box<Error>> {
+//         let len = data.len();
+//         let version = LittleEndian::read_u32(&data[0..4]);
+
+//         let _tile_count = LittleEndian::read_u32(&data[4..8]);
+//         let first_tile = LittleEndian::read_u32(&data[8..12]);
+//         let last_tile = LittleEndian::read_u32(&data[12..16]);
+//         let tile_count = last_tile - first_tile + 1; // + 1?
+
+//         let tiles_x: Vec<u16> = Vec::new();
+//         let tiles_y: Vec<u16> = Vec::new();
+//         let tiles_animation: Vec<u32> = Vec::new();
+
+//         // short tilesizx[localtileend-localtilestart+1];
+//         // short tilesizy[localtileend-localtilestart+1];
+
+//         if version != 1 {
+//             bail!("Invalid ART version");
+//         }
+//     }
+// }
 
 
 #[cfg(test)]
@@ -273,63 +319,5 @@ mod tests {
     }
 
     // TODO: Add checks for data_off and table_off going out of bounds.
-}
 
-
-// What's the .MAP / .ART file format?
-//
-// Go to my Build Source Code Page and download BUILDSRC.ZIP. I have a text file
-// in there (BUILDINF.TXT) which describes both formats.
-
-
-// What's the PALETTE.DAT format?
-//
-// See this separate PALETTE.TXT <http://advsys.net/ken/palette.txt> file which
-// explains it all.
-
-
-// What's the TABLES.DAT format ?
-//
-// See this separate TABLES.TXT <http://advsys.net/ken/tables.txt> file which
-// explains it all.
-
-
-// What's the .KVX file format?
-//
-// Go to my Projects Page <http://advsys.net/ken/download.htm?#slab6> and
-// download SLAB6.ZIP. I have a text file in there (SLAB6.TXT) which describes
-// the format.
-
-
-// What's the .VOX file format?
-//
-// Both SLABSPRI & SLAB6 support a simpler, uncompressed voxel format using the
-// .VOX file extension. (See the documentation that comes with those programs.)
-// The .VOX format is simple enough to fit a description of it right here.
-// Here's some C pseudocode:
-//
-// long xsiz, ysiz, zsiz;
-// char voxel[xsiz][ysiz][zsiz];
-// char palette[256][3];
-//
-// fil = open("?.vox",...);
-// read(fil,&xsiz,4);
-// read(fil,&ysiz,4);
-// read(fil,&zsiz,4);
-// read(fil,voxel,xsiz*ysiz*zsiz);
-// read(fil,palette,768);
-// close(fil);
-//
-// In the voxel array, use color 255 to define your empty space (air). For
-// interior voxels (ones you can never see), do not use color 255, because it
-// will prevent SLABSPRI from being able to take advantage of back-face culling.
-
-
-// How does SLABSPRI convert images to voxels?
-//
-// It starts out with a solid cube. Then it runs through all of the rotations,
-// chopping out any voxels that lie behind a transparent pixel (color 255). Once
-// this is done, it runs through all the rotations again, this time painting
-// colors onto the voxel object. If an individual cube is painted twice, the
-// colors get averaged. Voxels that don't get hit by paint get randomly set to a
-// nearby color.
+}// TODO: Write documentation
