@@ -18,9 +18,12 @@ use self::byteorder::{ByteOrder, LittleEndian};
 // the file's size. The rest of the group file is just the raw data packed one
 // after the other in the same order as the list of files.
 
-/// Implementation of a group file "cache", into which the contents of various
-/// group files are loaded. This is only somewhat reminiscent of the way
-/// Silverman's original code goes about loading game data.
+/// Implementation of a group file "cache", into which the contents of several
+/// group files can be loaded. This is somewhat similar to the way that
+/// Silverman's original code goes about loading game data. Additionally, this
+/// struct manages a list of "search paths" on the filesystem to resolve the
+/// absolute path of data files that have several possible locations.
+/// See the documentation of 'load_file' for more information.
 #[derive(Debug)]
 pub struct GroupManager {
     files: HashMap<String, Vec<u8>>,
@@ -95,9 +98,21 @@ impl GroupManager {
         Some(&self.files.get(filename)?)
     }
 
-    // FIXME: Documentation needs to be rewritten.
-
-    /// Loads the contents of an on-disk group file into the cache.
+    /// Go through the search path list in order and load the contents of the
+    /// first group archive with the given name. Specifically, the default
+    /// search path order is:
+    ///
+    /// - ".",
+    /// - "/usr/local/share/games/rebuild",
+    /// - "/usr/share/games/rebuild",
+    /// - "/usr/local/share/games/eduke32",
+    /// - "/usr/share/games/eduke32",
+    /// - "/usr/local/share/games/jfduke3d",
+    /// - "/usr/share/games/jfduke3d",
+    /// - "$HOME/.rebuild",
+    ///
+    /// This is followed by any additional paths in the search path list that
+    /// came about from a call to 'add_search_path'.
     pub fn load_file(&mut self, filename: &str) -> Result<(), Box<Error>> {
         for directory in self.search.clone().iter() {
             let path = format!("{}/{}", directory, filename);
@@ -116,6 +131,7 @@ impl GroupManager {
         bail!("File not found in any search paths.")
     }
 
+    /// Adds an additional path for 'load_file' to search.
     pub fn add_search_path(&mut self, path: &str) -> Result<(), Box<Error>> {
         if Path::new(&path).exists() {
             self.search.push(String::from(path));
@@ -319,5 +335,4 @@ mod tests {
     }
 
     // TODO: Add checks for data_off and table_off going out of bounds.
-
-}// TODO: Write documentation
+}
