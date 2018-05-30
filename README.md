@@ -1,22 +1,26 @@
-An attempt at reimplementing Ken Silverman's Build engine, with the goal of
-being modular enough to host a modern Blood source port. The motivation comes
-from the fact that [BloodGDX][1], the current source port being recommended by
-many, is nonfree, and written in Java.
-
-Additionally, existing source ports such as [EDuke32][2] which are built upon
-Ken Silverman's codebase are filled with legacy cruft and are subject to the
-restrictions of the BUILD license.
+Rebuild is an attempt at reimplementing Ken Silverman's Build engine, with the
+goal of being modular enough to host modern source ports of any Build engine
+game. The motivation comes from the fact that [BloodGDX][1], the current
+recommended source port for Blood, is nonfree and written in Java. Additionally,
+other source ports such as [EDuke32][2] are built upon Ken Silverman's codebase,
+which is full of DOS-era optimizations like self-modifying code and a generous
+amount of globally-shared state. They're also subject to the restrictions of the
+BUILD license.
 
 
 # Roadmap
 
-- [ ] Implement usable parsers for the various Build engine formats.
-  - [x] Implement a GRP loader.
-  - [ ] Implement a MAP parser.
-  - [ ] Implement an ART parser.
-  - [ ] Implement a VOX parser.
-  - [ ] Implement a PALETTE.DAT parser.
-  - [ ] Implement a TABLES.DAT parser.
+- [ ] Implement support for GRP archives.
+  - [x] GRP parser.
+  - [x] Caching system.
+  - [ ] Proper path resolution.
+- [ ] Implement a timer.
+- [ ] Implement support for ART bitmaps.
+  - [ ] PALETTE.DAT parser.
+  - [ ] ART parser.
+  - [ ] Efficient ART-to-bitmap conversion.
+- [ ] Implement support for Build's MAPs.
+  - [ ] MAP parser.
 
 
 [1]: https://blood-wiki.org/index.php/BloodGDX
