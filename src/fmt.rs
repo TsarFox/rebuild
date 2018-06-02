@@ -1,3 +1,19 @@
+// Copyright (C) 2018 Jakob L. Kreuze, All Rights Reserved.
+//
+// This file is part of rebuild.
+//
+// rebuild is free software: you can redistribute it and/or modify it under the
+// terms of the GNU General Public License as published by the Free Software
+// Foundation, either version 3 of the License, or (at your option) any later
+// version.
+//
+// rebuild is distributed in the hope that it will be useful, but WITHOUT ANY
+// WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
+// A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+// You should have received a copy of the GNU General Public License along with
+// rebuild. If not, see <http://www.gnu.org/licenses/>.
+
 extern crate byteorder;
 extern crate simple_error;
 
@@ -298,6 +314,11 @@ mod grp_tests {
 // shades. The problem is that my palette conversion program never truncated off
 // the end of the file. So the last 8K of Duke3D's PALETTE.DAT is the last 8K of
 // a translucent table that was based on an older version of their palette.
+//
+//
+// For canonical parsers, see:
+// - 'paletteLoadFromDisk' in EDuke's 'build/src/palette.cpp'
+// - 'loadpalette' in Build's 'ENGINE.C'
 
 /// Parser for PALETTE.DAT, the file specifying the color format.
 pub struct Palette {

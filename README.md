@@ -14,7 +14,10 @@ BUILD license.
   - [x] GRP parser.
   - [x] Caching system.
   - [ ] Proper path resolution.
-- [ ] Implement a timer.
+- [ ] Implement support for RTS. (?)
+  - Appears to be a Doom iwad, though I'm not sure what its purpose is.
+- [ ] Implement a timer system.
+  - Needs to expose some sort of 'totalclock'.
 - [ ] Implement support for ART bitmaps.
   - [ ] PALETTE.DAT parser.
   - [ ] ART parser.
