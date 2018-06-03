@@ -7,23 +7,60 @@ which is full of DOS-era optimizations like self-modifying code and a generous
 amount of globally-shared state. They're also subject to the restrictions of the
 BUILD license.
 
+Also, it's come to my attention that "Rebuild" also happens to be the name of
+the toolkit included in Transfusion for working with the BUILD file formats.
+This is an unrelated project, and I apologize for any confusion caused by my
+lack of foresight.
+
+
+# Thanks
+
+- To the 3D Realms teams for releasing the source code for Duke Nukem 3D.
+- To Richard Gobeille et al. for their work on EDuke32.
+- To Mathieu Olivier for releasing the source code to his various BUILD format parsers.
+
 
 # Roadmap
 
 - [ ] Implement support for GRP archives.
   - [x] GRP parser.
   - [x] Caching system.
+  - [ ] Support for 'grpinfo' files and GRP dependency chains.
+  - [ ] Support for the 'autoload' directory.
+  - [ ] Support for game mods.
+  - [ ] Internal support for official add-ons.
+  - [ ] Support for CRC32 identification.
+  - [ ] Resolution of group files based on the current game.
   - [ ] Proper path resolution.
-- [ ] Implement support for RTS. (?)
+    - This means removing certain paths when the necessary groups are loaded.
   - Appears to be a Doom iwad, though I'm not sure what its purpose is.
+- [ ] Implement support for Build's MAPs.
+  - [ ] MAP parser.
 - [ ] Implement a timer system.
   - Needs to expose some sort of 'totalclock'.
 - [ ] Implement support for ART bitmaps.
   - [ ] PALETTE.DAT parser.
   - [ ] ART parser.
   - [ ] Efficient ART-to-bitmap conversion.
-- [ ] Implement support for Build's MAPs.
-  - [ ] MAP parser.
+- [ ] Implement support for the CON language.
+  - [ ] Write a compiler.
+  - [ ] Implement the virtual machine.
+  - [ ] Implement a debugger.
+- [ ] Implement support for DEF files.
+- [ ] Implement support for MACT scripts. (Apparently quite similar to INI)
+- [ ] Implement support for RTS.
+- [ ] Implement the OSD shell.
+  - [ ] Gamevars and cvars.
+  - [ ] Loading of 'autoexec.cfg', 'settings.cfg'.
+- [ ] Implement the CONTROL input system.
+  - EDuke32's controls feel very fluid for me, so I'll steal the calculations and make the API less archaic.
+- [ ] Implement something equivalent to the "classic" software renderer.
+- [ ] Implement a more powerful OpenGL renderer, taking from POLYMER's architecture.
+- [ ] A welcoming main menu.
+- [ ] Support for save files.
+- [ ] Support for ANM cinematics.
+- [ ] Multiplayer networking!
+  - Doesn't necessarily have to be compatible with ENet, but it'd be a plus.
 
 
 [1]: https://blood-wiki.org/index.php/BloodGDX
