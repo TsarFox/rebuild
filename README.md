@@ -16,8 +16,9 @@ lack of foresight.
 # Thanks
 
 - To the 3D Realms teams for releasing the source code for Duke Nukem 3D.
+- To Fabien Sanglard for his [detailed analysis of the Duke Nukem 3D codebase][3], and his work on Chocolate Duke3D.
 - To Richard Gobeille et al. for their work on EDuke32.
-- To Mathieu Olivier for releasing the source code to his various BUILD format parsers.
+- To Mathieu Olivier et al. for their work on Transfusion - specifically their open-source parsing code for the BUILD file formats.
 
 
 # Roadmap
@@ -65,3 +66,4 @@ lack of foresight.
 
 [1]: https://blood-wiki.org/index.php/BloodGDX
 [2]: http://eduke32.com/
+[3]: http://fabiensanglard.net/duke3d/index.php
