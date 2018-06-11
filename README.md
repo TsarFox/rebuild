@@ -43,6 +43,8 @@ lack of foresight.
   - [ ] PALETTE.DAT parser.
   - [ ] ART parser.
   - [ ] Efficient ART-to-bitmap conversion.
+  - [ ] Advanced ART features such as translucency and shading.
+  - [ ] Tests.
 - [ ] Implement support for the CON language.
   - [ ] Write a compiler.
   - [ ] Implement the virtual machine.
@@ -50,13 +52,15 @@ lack of foresight.
 - [ ] Implement support for DEF files.
 - [ ] Implement support for MACT scripts. (Apparently quite similar to INI)
 - [ ] Implement support for RTS.
+- [ ] Implement graphical output.
+  - [ ] Write something using the kiss3d library to hold me over while I'm trying to learn the linear algebra required to write an actual renderer.
+  - [ ] Implement something equivalent to the "classic" software renderer.
+  - [ ] Implement a more powerful glium renderer, taking from POLYMER's architecture.
 - [ ] Implement the OSD shell.
   - [ ] Gamevars and cvars.
   - [ ] Loading of 'autoexec.cfg', 'settings.cfg'.
 - [ ] Implement the CONTROL input system.
   - EDuke32's controls feel very fluid for me, so I'll steal the calculations and make the API less archaic.
-- [ ] Implement something equivalent to the "classic" software renderer.
-- [ ] Implement a more powerful OpenGL renderer, taking from POLYMER's architecture.
 - [ ] A welcoming main menu.
 - [ ] Support for save files.
 - [ ] Support for ANM cinematics.

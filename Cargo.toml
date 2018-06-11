@@ -6,6 +6,4 @@ authors = ["Jakob L. Kreuze <jakob@memeware.net>"]
 [dependencies]
 byteorder = "1"
 simple-error = "0.1"
-glium_sdl2 = "0.15"
-sdl2 = "0.30"
-glium = "0.18"
+kiss3d = "0.12"
