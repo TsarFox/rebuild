@@ -40,9 +40,9 @@ lack of foresight.
 - [ ] Implement a timer system.
   - Needs to expose some sort of 'totalclock'.
 - [ ] Implement support for ART bitmaps.
-  - [ ] PALETTE.DAT parser.
-  - [ ] ART parser.
-  - [ ] Efficient ART-to-bitmap conversion.
+  - [x] PALETTE.DAT parser.
+  - [x] ART parser.
+  - [x] Efficient ART-to-bitmap conversion.
   - [ ] Advanced ART features such as translucency and shading.
   - [ ] Tests.
 - [ ] Implement support for the CON language.

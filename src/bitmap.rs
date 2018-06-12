@@ -103,12 +103,12 @@ impl BitmapManager {
 
             // FIXME: As of right now it's RGB, not ARGB.
             for i in 0..256 {
-                let r = data[(i * 3)] as u32;
-                let g = data[(i * 3) + 1] as u32;
-                let b = data[(i * 3) + 2] as u32;
+                let r = data[(i * 3)] << 2;
+                let g = data[(i * 3) + 1] << 2;
+                let b = data[(i * 3) + 2] << 2;
 
                 // FIXME: Also, I'm not a fan of this manual shifting shit.
-                palette.push(r << 4 | g << 2 | b << 0);
+                palette.push(((r as u32) << 16) | ((g as u32) << 8) | (b as u32));
             }
 
             palette
