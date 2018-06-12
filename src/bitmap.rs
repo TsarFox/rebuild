@@ -103,12 +103,12 @@ impl BitmapManager {
 
             // FIXME: As of right now it's RGB, not ARGB.
             for i in 0..256 {
-                let r = data[i] as u32;
-                let g = data[i + 1] as u32;
-                let b = data[i + 2] as u32;
+                let r = data[(i * 3)] as u32;
+                let g = data[(i * 3) + 1] as u32;
+                let b = data[(i * 3) + 2] as u32;
 
                 // FIXME: Also, I'm not a fan of this manual shifting shit.
-                palette.push(r << 4 | g << 2 | b);
+                palette.push(r << 4 | g << 2 | b << 0);
             }
 
             palette
@@ -270,8 +270,12 @@ impl BitmapManager {
 
             let mut data = Vec::new();
 
-            for index in indices.iter() {
-                data.push(palette[*index as usize]);
+            // FIXME: Casting this as usize is just nasty, man.
+            for column in 0..width {
+                for row in 0..height {
+                    let index = indices[(row as usize) * (width as usize) + (column as usize)];
+                    data.push(palette[index as usize]);
+                }
             }
 
             bitmaps.push(Bitmap { width, height, data });
