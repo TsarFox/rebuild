@@ -24,20 +24,67 @@ use std::io::Cursor;
 
 use self::byteorder::{LE, ReadBytesExt};
 
-/// Maintains the current state of the game world - the map geometry and
-/// everything contained within it.
+/// The basic element of a level, as understood by the BUILD engine - a logical
+/// collection of a floor, a ceiling, and some number of walls.
+#[derive(Debug)]
+pub struct Sector {
+    first_wall: i16,
+    wall_count: i16,
+    visibility: u8,
+    tags: (i16, i16, i16),
+
+    ceiling_height: i32,
+    ceiling_slope: i16,
+    ceiling_status: i16,
+    ceiling_bitmap: i16,
+    ceiling_shade: i8,
+    ceiling_palette: u8,
+    ceiling_panning: (u8, u8),
+
+    floor_height: i32,
+    floor_slope: i16,
+    floor_status: i16,
+    floor_bitmap: i16,
+    floor_shade: i8,
+    floor_palette: u8,
+    floor_panning: (u8, u8),
+}
+
+/// A "wall," taken to be some line segment as part of a sector's enclosing
+/// geometry. Portals, openings between sectors, are represented as walls, even
+/// though that isn't in-line with our typical definition of a "wall" in the
+/// real world.
+#[derive(Debug)]
+pub struct Wall {
+    position: (i32, i32),
+
+    adjacent_wall_index: i16,
+    opposite_wall_index: i16,
+    into_sector_index: i16,
+
+    bitmap: i16,
+    bitmap_overlay: i16,
+    shade: i8,
+    palette: u8,
+    stretch: (u8, u8),
+    panning: (u8, u8),
+
+    status: i16,
+    tags: (i16, i16, i16),
+}
+
+/// Maintains and advances the state of the entire game world, indluding the
+/// geometry of the current map.
 #[derive(Debug)]
 pub struct World {
-    sectors: Vec<Sector>,
-    walls: Vec<Wall>,
+    pub sectors: Vec<Sector>,
+    pub walls: Vec<Wall>,
 }
 
 impl World {
-    // TODO: Document this.
-    // FIXME: Doesn't do any sort of sanity checks on length.
+    /// Create a new World from the geometry and sprites specified in the given
+    /// MAP file.
     pub fn from_map(data: &[u8]) -> Result<World, Box<Error>> {
-        let mut data = Cursor::new(data);
-
         // From BUILDINF.TXT
         //
         // Here is Ken's documentation on the COMPLETE BUILD map format:
@@ -72,13 +119,26 @@ impl World {
         //      close(fil);
         // }
 
+        let len = data.len();
+
+        // This is the absolute minimum possible size for a MAP, containing the
+        // header and a 0 short for each of the three arrays. This will be
+        // incremented as we find out more information about the MAP file -
+        // specifically, the number of sectors, walls, and sprites we expect.
+        let mut expected_len = 22;
+
+        if len < expected_len {
+            bail!("File too small to possibly contain valid MAP.");
+        }
+
+        let mut data = Cursor::new(data);
         let version = data.read_u32::<LE>()?;
 
         if version != 7 {
             bail!("Unsupported MAP version.");
         }
 
-        // TODO: Use this to position the world's player (?)
+        // TODO: Use this to position when initializing the player.
         let _start_x = data.read_i32::<LE>()?;
         let _start_y = data.read_i32::<LE>()?;
         let _start_z = data.read_i32::<LE>()?;
@@ -137,6 +197,11 @@ impl World {
 
         let mut sectors = Vec::new();
         let sector_count = data.read_u16::<LE>()?;
+        expected_len += 40 * (sector_count as usize);
+
+        if len < expected_len {
+            bail!(format!("Invalid sector count (given: {})", sector_count));
+        }
 
         for _ in 0..sector_count {
             let first_wall = data.read_i16::<LE>()?;
@@ -235,6 +300,11 @@ impl World {
 
         let mut walls = Vec::new();
         let wall_count = data.read_u16::<LE>()?;
+        expected_len += 32 * (wall_count as usize);
+
+        if len < expected_len {
+            bail!(format!("Invalid wall count (given: {})", wall_count));
+        }
 
         for _ in 0..wall_count {
             let position_x = data.read_i32::<LE>()?;
@@ -298,19 +368,21 @@ impl World {
         // } spritetype;
         // spritetype sprite[4096];
         //
-        // x, y, z - position of sprite - can be defined at center bottom or center
+        // x, y, z - position of sprite - can be defined at center bottom or
+        // center
+        //
         // cstat:
-        //         bit 0: 1 = Blocking sprite (use with clipmove, getzrange)       "B"
-        //         bit 1: 1 = transluscence, 0 = normal                            "T"
-        //         bit 2: 1 = x-flipped, 0 = normal                                "F"
-        //         bit 3: 1 = y-flipped, 0 = normal                                "F"
-        //         bits 5-4: 00 = FACE sprite (default)                            "R"
-        //                                  01 = WALL sprite (like masked walls)
-        //                                  10 = FLOOR sprite (parallel to ceilings&floors)
-        //         bit 6: 1 = 1-sided sprite, 0 = normal                           "1"
-        //         bit 7: 1 = Real centered centering, 0 = foot center             "C"
-        //         bit 8: 1 = Blocking sprite (use with hitscan / cliptype 1)      "H"
-        //         bit 9: 1 = Transluscence reversing, 0 = normal                  "T"
+        //         bit 0: 1 = Blocking sprite (use with clipmove, getzrange) "B"
+        //         bit 1: 1 = transluscence, 0 = normal                      "T"
+        //         bit 2: 1 = x-flipped, 0 = normal                          "F"
+        //         bit 3: 1 = y-flipped, 0 = normal                          "F"
+        //         bits 5-4: 00 = FACE sprite (default)                      "R"
+        //                   01 = WALL sprite (like masked walls)
+        //                   10 = FLOOR sprite (parallel to ceilings&floors)
+        //         bit 6: 1 = 1-sided sprite, 0 = normal                     "1"
+        //         bit 7: 1 = Real centered centering, 0 = foot center       "C"
+        //         bit 8: 1 = Blocking sprite (use with hitscan/cliptype 1)  "H"
+        //         bit 9: 1 = Transluscence reversing, 0 = normal            "T"
         //         bits 10-14: reserved
         //         bit 15: 1 = Invisible sprite, 0 = not invisible
         // picnum - texture index into art file
@@ -324,10 +396,16 @@ impl World {
         // statnum - current status of sprite (inactive/monster/bullet, etc.)
         //
         // ang - angle the sprite is facing
-        // owner, xvel, yvel, zvel, lotag, hitag, extra - These variables used by the game programmer only
+        // owner, xvel, yvel, zvel, lotag, hitag, extra - These variables used
+        // by the game programmer only
 
         let mut sprites = Vec::new();
         let sprite_count = data.read_u16::<LE>()?;
+        expected_len += 44 * (sprite_count as usize);
+
+        if len < expected_len {
+            bail!(format!("Invalid sprite count (given: {})", sprite_count));
+        }
 
         for _ in 0..sprite_count {
             let position_x = data.read_i32::<LE>()?;
@@ -380,47 +458,40 @@ impl World {
     }
 }
 
-#[derive(Debug)]
-struct Sector {
-    first_wall: i16,
-    wall_count: i16,
-    visibility: u8,
-    tags: (i16, i16, i16),
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    ceiling_height: i32,
-    ceiling_slope: i16,
-    ceiling_status: i16,
-    ceiling_bitmap: i16,
-    ceiling_shade: i8,
-    ceiling_palette: u8,
-    ceiling_panning: (u8, u8),
+    #[test]
+    fn test_load_slice() {
+        // Binary blob containing a MAP test vector, made by me. Contains an
+        // arbitrary header, no walls, no sectors, and no sprites.
+        let data = vec![
+            0x07, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00, 0x00,
+        ];
 
-    floor_height: i32,
-    floor_slope: i16,
-    floor_status: i16,
-    floor_bitmap: i16,
-    floor_shade: i8,
-    floor_palette: u8,
-    floor_panning: (u8, u8),
-}
+        if let Err(e) = World::from_map(&data) {
+            panic!("{}", e);
+        }
 
-#[derive(Debug)]
-struct Wall {
-    position: (i32, i32),
+        // TODO: Test the contents of the map.
+    }
 
-    adjacent_wall_index: i16,
-    opposite_wall_index: i16,
-    into_sector_index: i16,
+    #[test]
+    fn test_incomplete_header() {
+        // Binary blob similar to the MAP test vector above, but with a header
+        // that would be too small to be valid.
+        let data = vec![
+            0x07, 0x00, 0x00, 0x00,
+        ];
 
-    bitmap: i16,
-    bitmap_overlay: i16,
-    shade: i8,
-    palette: u8,
-    stretch: (u8, u8),
-    panning: (u8, u8),
-
-    status: i16,
-    tags: (i16, i16, i16),
+        if let Ok(_) = World::from_map(&data) {
+            panic!("Accepted invalid header.");
+        }
+    }
 }
 
 #[derive(Debug)]

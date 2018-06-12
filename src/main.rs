@@ -25,19 +25,18 @@ mod path;
 mod world;
 
 fn main() {
-    let path_manager = path::PathManager::new();
+    let paths = path::PathManager::new();
 
     let filename = "DUKE3D.GRP";
-    let mut group_manager = grp::GroupManager::new(path_manager);
+    let mut groups = grp::GroupManager::new(paths);
 
-    if let Err(e) = group_manager.load_file(filename) {
+    if let Err(e) = groups.load_file(filename) {
         println!("Couldn't open {}: {}", filename, e);
         process::exit(1);
     }
 
-    let map = group_manager.get("E1L1.MAP").unwrap();
-    let _world = world::World::from_map(map);
+    let map = groups.get("E1L1.MAP").unwrap();
+    let world = world::World::from_map(map).unwrap();
 
-    let bitmap_manager = bitmap::BitmapManager::new(&group_manager).unwrap();
-    let _tile = bitmap_manager.get_tile(277).unwrap();
+    let bitmaps = bitmap::BitmapManager::new(&groups).unwrap();
 }

@@ -22,7 +22,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 
-use self::byteorder::{ByteOrder, LittleEndian};
+use self::byteorder::{ByteOrder, LE};
 use path::PathManager;
 
 // What's the .GRP file format?
@@ -40,13 +40,15 @@ use path::PathManager;
 /// Silverman's original code goes about loading game data.
 #[derive(Debug)]
 pub struct GroupManager {
-    path_manager: PathManager,
+    paths: PathManager,
     files: HashMap<String, Vec<u8>>,
 }
 
 impl GroupManager {
-    pub fn new(path_manager: PathManager) -> GroupManager {
-        GroupManager { path_manager, files: HashMap::new() }
+    /// Creates a new GroupManager that uses the given PathManager to resolve
+    /// the locations of named GRP files.
+    pub fn new(paths: PathManager) -> GroupManager {
+        GroupManager { paths, files: HashMap::new() }
     }
 
     /// Loads the contents of an in-memory group file into the cache.
@@ -68,14 +70,14 @@ impl GroupManager {
             bail!("Invalid GRP header.");
         }
 
-        let file_count = LittleEndian::read_u32(&data[12..16]) as usize;
+        let file_count = LE::read_u32(&data[12..16]) as usize;
 
         // 16 bytes for the header, and 16 bytes for each table entry. The raw
         // data will follow.
         let data_start = 16 * (file_count + 1) as usize;
 
         if data_start >= len {
-            bail!("Invalid number of files.");
+            bail!(format!("Invalid number of files. (given: {})", file_count));
         }
 
         let mut data_off = data_start;
@@ -94,7 +96,7 @@ impl GroupManager {
             };
 
             let size = &data[table_off+12..table_off+16];
-            let size = LittleEndian::read_u32(size) as usize;
+            let size = LE::read_u32(size) as usize;
 
             if data_off + size > len {
                 bail!("`data_off >= len` - Table was likely corrupted.");
@@ -116,7 +118,7 @@ impl GroupManager {
     ///
     /// A return value of 'Err' indicates that the given path did not exist.
     pub fn load_file(&mut self, name: &str) -> Result<(), Box<Error>> {
-        if let Some(path) = self.path_manager.find(name) {
+        if let Some(path) = self.paths.find(name) {
             let mut file = File::open(path)?;
             let mut bytes: Vec<u8> = Vec::new();
 
@@ -136,7 +138,7 @@ impl GroupManager {
 }
 
 #[cfg(test)]
-mod grp_tests {
+mod tests {
     use super::*;
 
     #[test]
@@ -161,12 +163,11 @@ mod grp_tests {
             0x01, 0x02, 0x02, 0x03, 0x03, 0x03,
         ];
 
-        let path_manager = PathManager::new();
-        let mut group_manager = GroupManager::new(path_manager);
+        let paths = PathManager::new();
+        let mut group_manager = GroupManager::new(paths);
 
-        match group_manager.load_data(&data) {
-            Err(e) => panic!("{}", e),
-            Ok(_) => (),
+        if let Err(e) = group_manager.load_data(&data) {
+            panic!("{}", e);
         }
 
         let data = match group_manager.get("TESTFILEA") {
@@ -205,8 +206,8 @@ mod grp_tests {
             b'J', b'a', b'k', b'o', b'b',
         ];
 
-        let path_manager = PathManager::new();
-        let mut group_manager = GroupManager::new(path_manager);
+        let paths = PathManager::new();
+        let mut group_manager = GroupManager::new(paths);
 
         if let Ok(_) = group_manager.load_data(&data) {
             panic!("Accepted invalid header.");
@@ -225,8 +226,8 @@ mod grp_tests {
             0x01,
         ];
 
-        let path_manager = PathManager::new();
-        let mut group_manager = GroupManager::new(path_manager);
+        let paths = PathManager::new();
+        let mut group_manager = GroupManager::new(paths);
 
         if let Ok(_) = group_manager.load_data(&data) {
             panic!("Accepted invalid header.");
@@ -246,8 +247,8 @@ mod grp_tests {
             0x01,
         ];
 
-        let path_manager = PathManager::new();
-        let mut group_manager = GroupManager::new(path_manager);
+        let paths = PathManager::new();
+        let mut group_manager = GroupManager::new(paths);
 
         if let Ok(_) = group_manager.load_data(&data) {
             panic!("Accepted invalid header.");
@@ -266,8 +267,8 @@ mod grp_tests {
             0x01,
         ];
 
-        let path_manager = PathManager::new();
-        let mut group_manager = GroupManager::new(path_manager);
+        let paths = PathManager::new();
+        let mut group_manager = GroupManager::new(paths);
 
         if let Ok(_) = group_manager.load_data(&data) {
             panic!("Accepted invalid header.");

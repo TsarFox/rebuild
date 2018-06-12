@@ -23,7 +23,29 @@ use std::io::{Cursor, Read, Seek, SeekFrom};
 use self::byteorder::{LE, ReadBytesExt};
 use grp::GroupManager;
 
-/// Rectangular chunk of ARGB data.
+/// A rectangular chunk of raw ARGB8888 data. That is, each byte carries 8 bits
+/// of information about the intensity of a certain color. The following is a
+/// list of bitmasks and which color ("channel," in the vernacular) they
+/// represent.
+///
+/// 0x000000ff - Blue
+/// 0x0000ff00 - Green
+/// 0x00ff0000 - Red
+/// 0xff000000 - Alpha (transparency)
+///
+/// # Examples
+///
+/// Colors are extracted from each individual integer via bitwise operations.
+///
+/// ```
+/// let bitmap = bitmaps.get(277); // Arbitrary choice of tile number.
+/// let corner = bitmap.data[0];
+///
+/// let b = corner & 0xff;
+/// let g = (corner >> 8) & 0xff;
+/// let r = (corner >> 16) & 0xff;
+/// let a = (corner >> 24) & 0xff;
+/// ```
 #[derive(Clone)]
 pub struct Bitmap {
     pub width: u16,
@@ -31,14 +53,13 @@ pub struct Bitmap {
     pub data: Vec<u32>,
 }
 
-/// Manages access to bitmap tiles in a GRP archive.
+/// Implementation of a bitmap cache, which is used for obtaining a bitmap
+/// conversion of the individual tiles in a group file.
 pub struct BitmapManager {
     bitmaps: Vec<Bitmap>,
 }
 
 impl BitmapManager {
-    // FIXME: Should we have a hardcoded palette to fall back on if there is no
-    // PALETTE.DAT? That might make sense for Blood.
     /// Create a new BitmapManager, loading all of the bitmap tiles in the given
     /// GRP archive.
     ///
@@ -98,22 +119,26 @@ impl BitmapManager {
         // - 'paletteLoadFromDisk' in EDuke's 'build/src/palette.cpp'
         // - 'loadpalette' in Build's 'ENGINE.C'
         // - 'LoadPalette' in Transfusion's 'arttools/art2tga.c'
+
         let palette = if let Some(data) = grp.get("PALETTE.DAT") {
             let mut palette = Vec::new();
 
-            // FIXME: As of right now it's RGB, not ARGB.
             for i in 0..256 {
-                let r = data[(i * 3)] << 2;
-                let g = data[(i * 3) + 1] << 2;
-                let b = data[(i * 3) + 2] << 2;
-
-                // FIXME: Also, I'm not a fan of this manual shifting shit.
-                palette.push(((r as u32) << 16) | ((g as u32) << 8) | (b as u32));
+                // The VGA 262,144 color palette appears darker than intended
+                // when interpreted ARGB8888 output, so the intensity of the
+                // red, green, and blue channels are scaled by a uniform factor.
+                let a = (0xff) as u32;
+                let r = (data[(i * 3)] << 2) as u32;
+                let g = (data[(i * 3) + 1] << 2) as u32;
+                let b = (data[(i * 3) + 2] << 2) as u32;
+                palette.push(a << 24 | r << 16 | g << 8 | b);
             }
 
             palette
         } else {
-            bail!("No PALETTE.DAT");
+            // FIXME: There should be a default palette to fall back on. Update
+            // the documentation for this method when that's implemented.
+            bail!("No PALETTE.DAT in GRP archive.");
         };
 
         // From BUILDINF.TXT
@@ -121,20 +146,20 @@ impl BitmapManager {
         // All art files must have xxxxx###.ART. When loading an art file you
         // should keep trying to open new xxxxx###'s, incrementing the number,
         // until an art file is not found.
+
         for i in 0.. {
             if let Some(data) = grp.get(&format!("TILES{:03}.ART", i)) {
-                // FIXME: Hoo, boy. Passing that Error back up the stack is
-                // probably a pretty bad way of handling an invalid header.
-                bitmaps.extend_from_slice(&BitmapManager::load_art(data, &palette)?);
+                // FIXME: Passing the Error back up the stack is suboptimal (?)
+                let parsed = BitmapManager::load_art(data, &palette)?;
+                bitmaps.extend_from_slice(&parsed);
             } else {
-                // Indicates that there was no TILES000.ART, implying that
-                // literally NO bitmaps were loaded. That probably isn't right.
+                // Indicates that we didn't even load TILES000.ART, meaning that
+                // literally NO bitmaps were loaded. That's a pretty big issue.
                 if i == 0 {
-                    bail!("No TILES000.ART");
+                    bail!("No TILES000.ART in GRP archive.");
                 }
 
-                // But if we get here, it means that we just hit the last
-                // tilesheet and it's not worth our time to continue checking.
+                // But if i > 0, we simply hit the last tilesheet. No problem.
                 break;
             }
         }
@@ -144,9 +169,11 @@ impl BitmapManager {
 
     /// Load the tile given by the specified index, or None if no tile with the
     /// specified index exists.
-    pub fn get_tile(&self, index: i32) -> Option<&Bitmap> {
-        if (index as usize) < self.bitmaps.len() {
-            Some(&self.bitmaps[(index as usize)])
+    pub fn get(&self, index: i32) -> Option<&Bitmap> {
+        let index = index as usize;
+
+        if index < self.bitmaps.len() {
+            Some(&self.bitmaps[index])
         } else {
             None
         }
@@ -154,6 +181,12 @@ impl BitmapManager {
 
     /// Loads the tiles in an TILES###.ART file.
     fn load_art(data: &[u8], palette: &[u32]) -> Result<Vec<Bitmap>, Box<Error>> {
+        let len = data.len() as u32;
+
+        if len < 16 {
+            bail!("ART does not contain a valid header.");
+        }
+        
         let mut data = Cursor::new(data);
         let mut bitmaps = Vec::new();
 
@@ -164,6 +197,7 @@ impl BitmapManager {
         // The first 4 bytes in the art format are the version number. The
         // current current art version is now 1. If artversion is not 1 then
         // either it's the wrong art version or something is wrong.
+
         let version = data.read_u32::<LE>()?;
 
         if version != 1 {
@@ -177,7 +211,8 @@ impl BitmapManager {
         // would need this variable, but it turned it is was unnecessary. To get
         // the number of tiles, you should search all art files, and check the
         // localtilestart and localtileend values for each file.
-        let _ = data.read_u32::<LE>()?;
+
+        let _count = data.read_u32::<LE>()?;
 
         // 3. long localtilestart;
         //
@@ -194,9 +229,14 @@ impl BitmapManager {
         // TILES001.ART -> localtilestart = 256, localtileend = 511
         // TILES002.ART -> localtilestart = 512, localtileend = 767
         // TILES003.ART -> localtilestart = 768, localtileend = 1023
+
         let first_tile_index = data.read_u32::<LE>()?;
         let last_tile_index = data.read_u32::<LE>()?;
         let count = last_tile_index - first_tile_index + 1;
+
+        if len < 8 * count + 16 {
+            bail!(format!("Invalid number of tiles (given: {})", count));
+        }
 
         // 5. short tilesizx[localtileend-localtilestart+1];
         //
@@ -238,49 +278,106 @@ impl BitmapManager {
         // memory is stored. Example on a 4*4 file:
         //
         // Offsets:
-        // -----------------
-        // | 0 | 4 | 8 |12 |
-        // -----------------
-        // | 1 | 5 | 9 |13 |
-        // -----------------
-        // | 2 | 6 |10 |14 |
-        // -----------------
-        // | 3 | 7 |11 |15 |
-        // -----------------
-        let mut data_off = (16 + 2 * count + 2 * count + 4 * count) as u64;
-        
+        // ---------------------
+        // |  0 |  4 |  8 | 12 |
+        // ---------------------
+        // |  1 |  5 |  9 | 13 |
+        // ---------------------
+        // |  2 |  6 | 10 | 14 |
+        // ---------------------
+        // |  3 |  7 | 11 | 15 |
+        // ---------------------
+
+        // 16 bytes for the header, 2 bytes per entry for the array of bitmap
+        // widths, 2 bytes per entry for the array of bitmap heights, and 4
+        // bytes per entry for the array of bitmap attributes.
+
+        let data_off = 16 + 2 * count + 2 * count + 4 * count;
+        let mut data_off = data_off as u64;
+
+        if (len as u64) < data_off {
+            bail!(format!("Invalid number of tiles (given: {})", count));
+        }
+
         for i in 0..count {
-            // The header is 16 bytes, the width and height arrays are both 2
-            // bytes per value, and the attribute array is 4 bytes per value.
-            // The raw bitmap data follows immediately and the bounds of each
-            // bitmap are inferred from the width and height.
-            let width_array_off = (2 * i + 16) as u64;
-            let height_array_off = (2 * i + 2 * count + 16) as u64;
-
+            let width_array_off = 2 * i + 16;
+            let width_array_off = width_array_off as u64;
             data.seek(SeekFrom::Start(width_array_off))?;
-            let width = data.read_u16::<LE>()?;
+            let width = data.read_u16::<LE>()? as usize;
 
+            let height_array_off = 2 * i + 2 * count + 16;
+            let height_array_off = height_array_off as u64;
             data.seek(SeekFrom::Start(height_array_off))?;
-            let height = data.read_u16::<LE>()?;
+            let height = data.read_u16::<LE>()? as usize;
 
-            let mut indices = vec![0; (width as usize) * (height as usize)];
+            let mut indices = vec![0; width * height];
             data.seek(SeekFrom::Start(data_off))?;
             data.read(&mut indices)?;
             data_off += indices.len() as u64;
 
             let mut data = Vec::new();
 
-            // FIXME: Casting this as usize is just nasty, man.
             for column in 0..width {
                 for row in 0..height {
-                    let index = indices[(row as usize) * (width as usize) + (column as usize)];
+                    let index = indices[row * width + column];
                     data.push(palette[index as usize]);
                 }
             }
+
+            let width = width as u16;
+            let height = height as u16;
 
             bitmaps.push(Bitmap { width, height, data });
         }
 
         Ok(bitmaps)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_load_slice() {
+        // Generated palette blob. All colors in the palette are white (HTML hex
+        // ffffffff).
+        let palette = vec![0xffffffff; 256];
+
+        // Binary blob containing an ART test vector, made by me. Contains one
+        // tile, a single black pixel.
+        let data = vec![
+            0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x00,
+        ];
+
+        let parsed = BitmapManager::load_art(&data, &palette).unwrap();
+
+        assert_eq!(parsed.len(), 1);
+
+        let tile = &parsed[0];
+
+        assert_eq!(tile.width, 1);
+        assert_eq!(tile.height, 1);
+        assert_eq!(tile.data[0], 0xffffffff);
+    }
+
+    #[test]
+    fn test_incomplete_header() {
+        let palette = vec![0xffffffff; 256];
+
+        // Binary blob similar to the ART test vector above, but without the
+        // actual bitmap data.
+        let data = vec![
+            0x01, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00,
+            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        if let Ok(_) = BitmapManager::load_art(&data, &palette) {
+            panic!("Parser accepted invalid ART file.");
+        }
     }
 }

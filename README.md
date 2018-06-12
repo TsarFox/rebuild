@@ -34,9 +34,10 @@ lack of foresight.
   - [ ] Resolution of group files based on the current game.
   - [ ] Proper path resolution.
     - This means removing certain paths when the necessary groups are loaded.
-  - Appears to be a Doom iwad, though I'm not sure what its purpose is.
+  - [ ] Tests.
 - [ ] Implement support for Build's MAPs.
-  - [ ] MAP parser.
+  - [x] MAP parser.
+  - [ ] Tests.
 - [ ] Implement a timer system.
   - Needs to expose some sort of 'totalclock'.
 - [ ] Implement support for ART bitmaps.
@@ -52,6 +53,7 @@ lack of foresight.
 - [ ] Implement support for DEF files.
 - [ ] Implement support for MACT scripts. (Apparently quite similar to INI)
 - [ ] Implement support for RTS.
+  - Appears to be a Doom iwad, though I'm not sure what its purpose is.
 - [ ] Implement graphical output.
   - [ ] Write something using the kiss3d library to hold me over while I'm trying to learn the linear algebra required to write an actual renderer.
   - [ ] Implement something equivalent to the "classic" software renderer.
@@ -65,7 +67,7 @@ lack of foresight.
 - [ ] Support for save files.
 - [ ] Support for ANM cinematics.
 - [ ] Multiplayer networking!
-  - Doesn't necessarily have to be compatible with ENet, but it'd be a plus.
+  - Doesn't necessarily have to be compatible with ENet, but that would be a plus.
 
 
 [1]: https://blood-wiki.org/index.php/BloodGDX
