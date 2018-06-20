@@ -23,6 +23,8 @@ lack of foresight.
 
 # Roadmap
 
+- [ ] Nonredistributable GRP creation as part of the build system.
+  - This should be like 'qzdoom.pk3', and contain blobs extracted from the source tree.
 - [ ] Implement support for GRP archives.
   - [x] GRP parser.
   - [x] Caching system.
@@ -55,9 +57,8 @@ lack of foresight.
 - [ ] Implement support for RTS.
   - Appears to be a Doom iwad, though I'm not sure what its purpose is.
 - [ ] Implement graphical output.
-  - [ ] Write something using the kiss3d library to hold me over while I'm trying to learn the linear algebra required to write an actual renderer.
+  - [ ] Implement a renderer using glium.
   - [ ] Implement something equivalent to the "classic" software renderer.
-  - [ ] Implement a more powerful glium renderer, taking from POLYMER's architecture.
 - [ ] Implement the OSD shell.
   - [ ] Gamevars and cvars.
   - [ ] Loading of 'autoexec.cfg', 'settings.cfg'.

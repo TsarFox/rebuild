@@ -20,6 +20,7 @@ extern crate simple_error;
 use std::process;
 
 mod bitmap;
+mod gl_renderer;
 mod grp;
 mod path;
 mod world;
@@ -36,7 +37,10 @@ fn main() {
     }
 
     let map = groups.get("E1L1.MAP").unwrap();
-    let world = world::World::from_map(map).unwrap();
+    let _world = world::World::from_map(map).unwrap();
 
     let bitmaps = bitmap::BitmapManager::new(&groups).unwrap();
+    let _tile = bitmaps.get(0);
+
+    let _renderer = gl_renderer::GLRenderer::new(&groups);
 }
