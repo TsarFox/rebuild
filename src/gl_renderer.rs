@@ -19,62 +19,26 @@ extern crate simple_error;
 
 use std::error::Error;
 
-use bitmap::Bitmap;
+use bitmap::{Bitmap, load_font};
 use grp::GroupManager;
 
 /// Renderer using the OpenGL library.
 pub struct GLRenderer;
 
 impl GLRenderer {
+    /// Instantiate a new instance of the renderer.
     pub fn new(groups: &GroupManager) -> Result<GLRenderer, Box<Error>> {
-        let _font = GLRenderer::load_font(groups);
-
-        Ok(GLRenderer { })
-    }
-
-    // TODO: Document this.
-    // TODO: Wouldn't this make more sense in the 'bitmap' module?
-    fn load_font(groups: &GroupManager) -> Result<Bitmap, Box<Error>> {
         let tables = match groups.get("TABLES.DAT") {
             Some(tables) => tables,
             None => bail!("GRP does not contain a TABLES.DAT"),
         };
 
-        // <= ?
-        if tables.len() < 7424 {
-            bail!("TABLES.DAT does not contain a font.");
-        }
+        // TODO: Separate bitmaps for textfont and smalltextfont?
+        let data = &tables[5376..7424];
 
-        let font = &tables[5376..7424];
+        // TODO: The BitmapManager should maintain the font.
+        let _font: Bitmap = load_font(data);
 
-        let width = 128;
-        let height = 256;
-        let mut data = vec![0; height * width];
-
-        // TODO: Replace '256' with a static 'MAX_GLYPH'.
-        for glyph in 0..256 {
-            let x_off = (glyph % 32) * 8;
-            let y_off = (glyph / 32) * 8;
-
-            for i in 0..8 {
-                for j in 0..8 {
-                    let byte = font[(glyph * 8 + i) as usize];
-                    let bit = 2 << (7 - j);
-
-                    if byte & bit != 0 {
-                        // The font doesn't carry any color information, it's
-                        // just white.
-                        let pixel = 0xffffffff;
-
-                        let x = x_off + i;
-                        let y = y_off + j;
-
-                        data[x * width + y] = pixel;
-                    }
-                }
-            }
-        }
-
-        Ok(Bitmap { width: width as u16, height: height as u16, data })
+        Ok(GLRenderer { })
     }
 }

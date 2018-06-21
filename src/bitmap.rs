@@ -186,7 +186,7 @@ impl BitmapManager {
         if len < 16 {
             bail!("ART does not contain a valid header.");
         }
-        
+
         let mut data = Cursor::new(data);
         let mut bitmaps = Vec::new();
 
@@ -332,6 +332,47 @@ impl BitmapManager {
 
         Ok(bitmaps)
     }
+}
+
+// FIXME: This documentation is bare and undescriptive.
+/// Loads a font blob into a Bitmap.
+pub fn load_font(font: &[u8]) -> Bitmap {
+    // TODO: There is no error checking, as I plan to dynamically generate a
+    // number of glyphs and appropriate dimensions from the size of 'data'.
+    
+    // FIXME: Width and height constants are arbitrary and should ideally be
+    // dynamically calculated for a set of glyphs with arbitrary length.
+    let width = 128;
+    let height = 256;
+
+    let mut data = vec![0; height * width];
+
+    // FIXME: Again, this MAX_GLYPH, which isn't even referred to by a static
+    // constant, should be dynamically calculated.
+    for glyph in 0..256 {
+        let x_off = (glyph % 32) * 8;
+        let y_off = (glyph / 32) * 8;
+
+        for i in 0..8 {
+            for j in 0..8 {
+                let byte = font[(glyph * 8 + i) as usize];
+                let bit = 2 << (7 - j);
+
+                if byte & bit != 0 {
+                    // The font files don't convey any color information, just
+                    // the pixel that's set, so we default to a plain white.
+                    let pixel = 0xffffffff;
+
+                    let x = x_off + i;
+                    let y = y_off + j;
+
+                    data[x * width + y] = pixel;
+                }
+            }
+        }
+    }
+
+    Bitmap { width: width as u16, height: height as u16, data }
 }
 
 #[cfg(test)]
