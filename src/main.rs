@@ -40,7 +40,7 @@ fn main() {
     let _world = world::World::from_map(map).unwrap();
 
     let bitmaps = bitmap::BitmapManager::new(&groups).unwrap();
-    let _tile = bitmaps.get(0);
+    let _tile = bitmaps.get_tile(0);
 
-    let _renderer = gl_renderer::GLRenderer::new(&groups);
+    let _renderer = gl_renderer::GLRenderer::new(&bitmaps);
 }

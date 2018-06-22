@@ -19,25 +19,15 @@ extern crate simple_error;
 
 use std::error::Error;
 
-use bitmap::{Bitmap, load_font};
-use grp::GroupManager;
+use bitmap::BitmapManager;
 
 /// Renderer using the OpenGL library.
 pub struct GLRenderer;
 
 impl GLRenderer {
     /// Instantiate a new instance of the renderer.
-    pub fn new(groups: &GroupManager) -> Result<GLRenderer, Box<Error>> {
-        let tables = match groups.get("TABLES.DAT") {
-            Some(tables) => tables,
-            None => bail!("GRP does not contain a TABLES.DAT"),
-        };
-
-        // TODO: Separate bitmaps for textfont and smalltextfont?
-        let data = &tables[5376..7424];
-
-        // TODO: The BitmapManager should maintain the font.
-        let _font: Bitmap = load_font(data);
+    pub fn new(bitmaps: &BitmapManager) -> Result<GLRenderer, Box<Error>> {
+        let _font = bitmaps.get_font("textfont").unwrap();
 
         Ok(GLRenderer { })
     }

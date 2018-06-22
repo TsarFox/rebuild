@@ -17,6 +17,7 @@
 extern crate byteorder;
 extern crate simple_error;
 
+use std::collections::HashMap;
 use std::error::Error;
 use std::io::{Cursor, Read, Seek, SeekFrom};
 
@@ -38,7 +39,7 @@ use grp::GroupManager;
 /// Colors are extracted from each individual integer via bitwise operations.
 ///
 /// ```
-/// let bitmap = bitmaps.get(277); // Arbitrary choice of tile number.
+/// let bitmap = bitmaps.get_tile(277); // Arbitrary choice of tile number.
 /// let corner = bitmap.data[0];
 ///
 /// let b = corner & 0xff;
@@ -56,7 +57,8 @@ pub struct Bitmap {
 /// Implementation of a bitmap cache, which is used for obtaining a bitmap
 /// conversion of the individual tiles in a group file.
 pub struct BitmapManager {
-    bitmaps: Vec<Bitmap>,
+    fonts: HashMap<String, Bitmap>,
+    tiles: Vec<Bitmap>,
 }
 
 impl BitmapManager {
@@ -67,8 +69,8 @@ impl BitmapManager {
     ///
     /// This will fail if no 'PALETTE.DAT' entry exists in the GRP archive, or
     /// if there is no 'TILES000.ART' entry.
-    pub fn new(grp: &GroupManager) -> Result<BitmapManager, Box<Error>> {
-        let mut bitmaps = Vec::new();
+    pub fn new(groups: &GroupManager) -> Result<BitmapManager, Box<Error>> {
+        let mut tiles = Vec::new();
 
         // What's the PALETTE.DAT format?
         //
@@ -120,7 +122,7 @@ impl BitmapManager {
         // - 'loadpalette' in Build's 'ENGINE.C'
         // - 'LoadPalette' in Transfusion's 'arttools/art2tga.c'
 
-        let palette = if let Some(data) = grp.get("PALETTE.DAT") {
+        let palette = if let Some(data) = groups.get("PALETTE.DAT") {
             let mut palette = Vec::new();
 
             for i in 0..256 {
@@ -148,13 +150,13 @@ impl BitmapManager {
         // until an art file is not found.
 
         for i in 0.. {
-            if let Some(data) = grp.get(&format!("TILES{:03}.ART", i)) {
+            if let Some(data) = groups.get(&format!("TILES{:03}.ART", i)) {
                 // FIXME: Passing the Error back up the stack is suboptimal (?)
                 let parsed = BitmapManager::load_art(data, &palette)?;
-                bitmaps.extend_from_slice(&parsed);
+                tiles.extend_from_slice(&parsed);
             } else {
                 // Indicates that we didn't even load TILES000.ART, meaning that
-                // literally NO bitmaps were loaded. That's a pretty big issue.
+                // literally NO tiles were loaded. That's a pretty big issue.
                 if i == 0 {
                     bail!("No TILES000.ART in GRP archive.");
                 }
@@ -164,16 +166,44 @@ impl BitmapManager {
             }
         }
 
-        Ok(BitmapManager { bitmaps })
+        // TABLES.DAT contains the 'textfont' and 'smalltextfont' blobs at
+        // specific offsets.
+
+        let tables = match groups.get("TABLES.DAT") {
+            Some(tables) => tables,
+            None => bail!("GRP does not contain a TABLES.DAT"),
+        };
+
+        let mut fonts = HashMap::new();
+
+        // Both blobs are 1024 bytes in length.
+
+        let textfont = load_font(&tables[5376..6400]);
+        let smalltextfont = load_font(&tables[6400..7424]);
+
+        fonts.insert("textfont".to_string(), textfont);
+        fonts.insert("smalltextfont".to_string(), smalltextfont);
+
+        Ok(BitmapManager { fonts, tiles })
     }
 
     /// Load the tile given by the specified index, or None if no tile with the
     /// specified index exists.
-    pub fn get(&self, index: i32) -> Option<&Bitmap> {
+    pub fn get_tile(&self, index: i32) -> Option<&Bitmap> {
         let index = index as usize;
 
-        if index < self.bitmaps.len() {
-            Some(&self.bitmaps[index])
+        if index < self.tiles.len() {
+            Some(&self.tiles[index])
+        } else {
+            None
+        }
+    }
+
+    /// Load the glyph atlas given by the specified name, or None if no font
+    /// with the specified name exists.
+    pub fn get_font(&self, name: &str) -> Option<&Bitmap> {
+        if self.fonts.contains_key(name) {
+            Some(&self.fonts.get(name).unwrap())
         } else {
             None
         }
@@ -188,7 +218,7 @@ impl BitmapManager {
         }
 
         let mut data = Cursor::new(data);
-        let mut bitmaps = Vec::new();
+        let mut tiles = Vec::new();
 
         // From BUILDINF.TXT
         //
@@ -327,52 +357,54 @@ impl BitmapManager {
             let width = width as u16;
             let height = height as u16;
 
-            bitmaps.push(Bitmap { width, height, data });
+            tiles.push(Bitmap { width, height, data });
         }
 
-        Ok(bitmaps)
+        Ok(tiles)
     }
 }
 
-// FIXME: This documentation is bare and undescriptive.
-/// Loads a font blob into a Bitmap.
-pub fn load_font(font: &[u8]) -> Bitmap {
-    // TODO: There is no error checking, as I plan to dynamically generate a
-    // number of glyphs and appropriate dimensions from the size of 'data'.
-    
-    // FIXME: Width and height constants are arbitrary and should ideally be
-    // dynamically calculated for a set of glyphs with arbitrary length.
-    let width = 128;
-    let height = 256;
+/// Creates a bitmap glyph atlas from the TABLES.DAT font blob. The bitmap will
+/// be a square, with dimensions that are multiples of 8 -- each glyph is 8
+/// pixels by 8 pixels. They are ordered left-to-right, top-to-bottom, in the
+/// order of the font blob. In the case of Duke Nukem 3D's TABLES.DAT, this
+/// generally follows ASCII ordering.
+fn load_font(font: &[u8]) -> Bitmap {
+    // Each glyph is 8 bytes in length (8 rows, where each row has 8 pixels of
+    // 1-bit data)
+    let glyph_count = font.len() / 8;
 
-    let mut data = vec![0; height * width];
+    let bitmap_length = (glyph_count as f64).sqrt().ceil() as usize;
+    let bitmap_length = bitmap_length * 8;
+    let mut data = vec![0; bitmap_length * bitmap_length];
 
-    // FIXME: Again, this MAX_GLYPH, which isn't even referred to by a static
-    // constant, should be dynamically calculated.
-    for glyph in 0..256 {
-        let x_off = (glyph % 32) * 8;
-        let y_off = (glyph / 32) * 8;
+    for glyph in 0..glyph_count {
+        let x_off = (glyph % (bitmap_length / 8)) * 8;
+        let y_off = (glyph / (bitmap_length / 8)) * 8;
 
-        for i in 0..8 {
-            for j in 0..8 {
-                let byte = font[(glyph * 8 + i) as usize];
-                let bit = 2 << (7 - j);
+        for y in 0..8 {
+            for x in 0..8 {
+                let byte = font[glyph * 8 + y];
+                let bit = 2 << (7 - x);
 
                 if byte & bit != 0 {
                     // The font files don't convey any color information, just
                     // the pixel that's set, so we default to a plain white.
                     let pixel = 0xffffffff;
 
-                    let x = x_off + i;
-                    let y = y_off + j;
+                    let x = x_off + x;
+                    let y = y_off + y;
 
-                    data[x * width + y] = pixel;
+                    data[y * bitmap_length + x] = pixel;
                 }
             }
         }
     }
 
-    Bitmap { width: width as u16, height: height as u16, data }
+    let width = bitmap_length as u16;
+    let height = bitmap_length as u16;
+
+    Bitmap { width, height, data }
 }
 
 #[cfg(test)]
