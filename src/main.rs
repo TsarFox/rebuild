@@ -22,6 +22,7 @@ use std::process;
 mod bitmap;
 mod gl_renderer;
 mod grp;
+mod input;
 mod path;
 mod world;
 
@@ -42,5 +43,14 @@ fn main() {
     let bitmaps = bitmap::BitmapManager::new(&groups).unwrap();
     let _tile = bitmaps.get_tile(0);
 
-    let _renderer = gl_renderer::GLRenderer::new(&bitmaps);
+    let mut renderer = gl_renderer::GLRenderer::new(&bitmaps).unwrap();
+
+    loop {
+        renderer.handle_input(|ev| {
+            match ev {
+                input::Event::KeyDown(key) => println!("{}", key),
+                _ => (),
+            }
+        });
+    }
 }

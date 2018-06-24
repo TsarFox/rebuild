@@ -19,16 +19,58 @@ extern crate simple_error;
 
 use std::error::Error;
 
+use self::glium::glutin;
+
 use bitmap::BitmapManager;
+use input::Event;
 
 /// Renderer using the OpenGL library.
-pub struct GLRenderer;
+pub struct GLRenderer {
+    events_loop: glutin::EventsLoop,
+    display: glium::Display,
+}
 
 impl GLRenderer {
     /// Instantiate a new instance of the renderer.
     pub fn new(bitmaps: &BitmapManager) -> Result<GLRenderer, Box<Error>> {
         let _font = bitmaps.get_font("textfont").unwrap();
 
-        Ok(GLRenderer { })
+        let events_loop = glutin::EventsLoop::new();
+        let window = glutin::WindowBuilder::new();
+        let context = glutin::ContextBuilder::new();
+        let display = glium::Display::new(window, context, &events_loop)?;
+
+        Ok(GLRenderer { events_loop, display })
+    }
+
+    // TODO: Document this.
+    fn convert_event(ev: glutin::DeviceEvent) -> Event {
+        match ev {
+            // glutin::DeviceEvent::Button { button, state } => {
+            //     if state == glutin::ElementState::Pressed {
+            //         Event::KeyDown(button as u8)
+            //     } else {
+            //         Event::KeyUp(button as u8)
+            //     }
+            // },
+            glutin::DeviceEvent::Key(press) => {
+                Event::KeyDown(press.scancode as u8)
+            }
+            _ => Event::None,
+        }
+    }
+
+    // TODO: Document this.
+    pub fn handle_input<F>(&mut self, mut on_event: F)
+    where F: FnMut(Event) {
+        self.events_loop.poll_events(|ev| {
+            match ev {
+                glutin::Event::DeviceEvent { device_id: _, event } => {
+                    let equivalent = GLRenderer::convert_event(event);
+                    on_event(equivalent);
+                },
+                _ => (),
+            }
+        });
     }
 }
