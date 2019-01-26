@@ -1,9 +1,0 @@
-[package]
-name = "rebuild"
-version = "0.1.0"
-authors = ["Jakob L. Kreuze <jakob@memeware.net>"]
-
-[dependencies]
-byteorder = "1"
-simple-error = "0.1"
-glium = "*"
